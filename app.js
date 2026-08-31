@@ -113,6 +113,7 @@
 
         // Modal
         $('btn-modal-cancel').addEventListener('click', closeModal);
+        $('btn-modal-cancel-btn').addEventListener('click', closeModal);
         $('btn-modal-save').addEventListener('click', saveModal);
 
         // Enter key on PIN inputs
@@ -127,11 +128,11 @@
         const confirm = confirmPin.value.trim();
 
         if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
-            showError('PIN must be 4-6 digits');
+            showError('ERR: KEY MUST BE 4-6 DIGITS');
             return;
         }
         if (pin !== confirm) {
-            showError('PINs do not match');
+            showError('ERR: KEYS DO NOT MATCH');
             return;
         }
 
@@ -152,7 +153,7 @@
             const pinHash = await hashPin(pin);
 
             if (pinHash !== stored.hash) {
-                showError('Wrong PIN');
+                showError('ERR: ACCESS DENIED');
                 return;
             }
 
@@ -160,7 +161,7 @@
             currentPin = pin;
             showApp();
         } catch {
-            showError('Wrong PIN or corrupted data');
+            showError('ERR: DECRYPTION FAILED');
         }
     }
 
@@ -229,7 +230,7 @@
         );
 
         if (filtered.length === 0) {
-            linksList.innerHTML = '<div class="empty-state">No links yet</div>';
+            linksList.innerHTML = '<div class="empty-state">NO LINKS IN VAULT</div>';
             return;
         }
 
@@ -259,11 +260,20 @@
         const link = vaultData.links.find(l => l.id === id);
         if (!link) return;
 
-        modalTitle.textContent = 'Edit Link';
+        modalTitle.textContent = 'EDIT_LINK';
         modalFields.innerHTML = `
-            <input type="text" id="edit-link-title" class="input-field" value="${esc(link.title)}" placeholder="Title">
-            <input type="url" id="edit-link-url" class="input-field" value="${esc(link.url)}" placeholder="https://...">
-            <input type="text" id="edit-link-tags" class="input-field" value="${esc(link.tags.join(', '))}" placeholder="Tags">
+            <div class="input-group">
+                <span class="input-prefix">title:</span>
+                <input type="text" id="edit-link-title" class="input-field" value="${esc(link.title)}" placeholder="entry title">
+            </div>
+            <div class="input-group">
+                <span class="input-prefix">url:</span>
+                <input type="url" id="edit-link-url" class="input-field" value="${esc(link.url)}" placeholder="https://">
+            </div>
+            <div class="input-group">
+                <span class="input-prefix">tags:</span>
+                <input type="text" id="edit-link-tags" class="input-field" value="${esc(link.tags.join(', '))}" placeholder="tag1, tag2">
+            </div>
         `;
         editModal.classList.remove('hidden');
         editModal.dataset.type = 'link';
@@ -299,7 +309,7 @@
         );
 
         if (filtered.length === 0) {
-            notesList.innerHTML = '<div class="empty-state">No notes yet</div>';
+            notesList.innerHTML = '<div class="empty-state">NO NOTES IN VAULT</div>';
             return;
         }
 
@@ -329,11 +339,20 @@
         const note = vaultData.notes.find(n => n.id === id);
         if (!note) return;
 
-        modalTitle.textContent = 'Edit Note';
+        modalTitle.textContent = 'EDIT_NOTE';
         modalFields.innerHTML = `
-            <input type="text" id="edit-note-title" class="input-field" value="${esc(note.title)}" placeholder="Title">
-            <textarea id="edit-note-content" class="input-field textarea-field" rows="5" placeholder="Note content">${esc(note.content)}</textarea>
-            <input type="text" id="edit-note-tags" class="input-field" value="${esc(note.tags.join(', '))}" placeholder="Tags">
+            <div class="input-group">
+                <span class="input-prefix">title:</span>
+                <input type="text" id="edit-note-title" class="input-field" value="${esc(note.title)}" placeholder="note title">
+            </div>
+            <div class="input-group">
+                <span class="input-prefix">data:</span>
+                <textarea id="edit-note-content" class="input-field textarea-field" rows="5" placeholder="write your note...">${esc(note.content)}</textarea>
+            </div>
+            <div class="input-group">
+                <span class="input-prefix">tags:</span>
+                <input type="text" id="edit-note-tags" class="input-field" value="${esc(note.tags.join(', '))}" placeholder="tag1, tag2">
+            </div>
         `;
         editModal.classList.remove('hidden');
         editModal.dataset.type = 'note';
@@ -396,7 +415,7 @@
                 renderNotes();
             }
         } catch {
-            alert('Invalid backup file');
+            alert('ERR: INVALID BACKUP FILE');
         }
         e.target.value = '';
     }

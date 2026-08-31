@@ -3,67 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Necromansa</title>
+    <title>NECROMANSA // VAULT</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Scanline overlay -->
+    <div class="scanlines"></div>
+    <!-- Grid background -->
+    <div class="grid-bg"></div>
+
     <!-- PIN Login Screen -->
     <div id="login-screen" class="screen active">
         <div class="login-container">
-            <h1 class="logo">NECROMANSA</h1>
-            <p class="subtitle">Link & Note Vault</p>
+            <div class="logo-wrap">
+                <div class="logo-glow"></div>
+                <h1 class="logo" data-text="NECROMANSA">NECROMANSA</h1>
+            </div>
+            <p class="subtitle">&lt; LINK &amp; NOTE VAULT &gt;</p>
+            <div class="status-line">SYSTEM: <span class="blink">AWAITING AUTHENTICATION</span></div>
+
             <div id="setup-section" class="hidden">
-                <p class="hint">Create a 4-6 digit PIN to secure your vault</p>
-                <input type="password" id="new-pin" class="pin-input" maxlength="6" placeholder="Create PIN" inputmode="numeric" pattern="[0-9]*">
-                <input type="password" id="confirm-pin" class="pin-input" maxlength="6" placeholder="Confirm PIN" inputmode="numeric" pattern="[0-9]*">
-                <button id="btn-create-pin" class="btn-primary">Create Vault</button>
+                <p class="hint">// Initialize vault &mdash; create a 4-6 digit access key</p>
+                <div class="input-group">
+                    <span class="input-prefix">&gt;</span>
+                    <input type="password" id="new-pin" class="pin-input" maxlength="6" placeholder="CREATE_KEY" inputmode="numeric" pattern="[0-9]*">
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">&gt;</span>
+                    <input type="password" id="confirm-pin" class="pin-input" maxlength="6" placeholder="CONFIRM_KEY" inputmode="numeric" pattern="[0-9]*">
+                </div>
+                <button id="btn-create-pin" class="btn-primary"><span class="btn-text">[ INITIALIZE VAULT ]</span></button>
             </div>
             <div id="login-section" class="hidden">
-                <input type="password" id="enter-pin" class="pin-input" maxlength="6" placeholder="Enter PIN" inputmode="numeric" pattern="[0-9]*">
-                <button id="btn-unlock" class="btn-primary">Unlock</button>
+                <p class="hint">// Enter access key to decrypt vault</p>
+                <div class="input-group">
+                    <span class="input-prefix">&gt;</span>
+                    <input type="password" id="enter-pin" class="pin-input" maxlength="6" placeholder="ACCESS_KEY" inputmode="numeric" pattern="[0-9]*">
+                </div>
+                <button id="btn-unlock" class="btn-primary"><span class="btn-text">[ DECRYPT VAULT ]</span></button>
             </div>
             <p id="login-error" class="error-text"></p>
+            <div class="login-footer">
+                <span class="cyber-line"></span>
+                <span class="footer-text">AES-256-GCM // PBKDF2 // CLIENT-SIDE</span>
+                <span class="cyber-line"></span>
+            </div>
         </div>
     </div>
 
     <!-- Main App Screen -->
     <div id="app-screen" class="screen">
         <header>
-            <h1 class="logo-sm">NECROMANSA</h1>
+            <div class="header-left">
+                <h1 class="logo-sm">NECROMANSA</h1>
+                <span class="header-tag">VAULT://ACTIVE</span>
+            </div>
             <div class="header-actions">
-                <button id="btn-export" class="btn-icon" title="Export data">&#8681;</button>
-                <button id="btn-import" class="btn-icon" title="Import data">&#8679;</button>
-                <button id="btn-lock" class="btn-icon" title="Lock vault">&#9919;</button>
+                <button id="btn-export" class="btn-icon" title="Export backup">[ <span class="icon-label">EXPORT</span> ]</button>
+                <button id="btn-import" class="btn-icon" title="Import backup">[ <span class="icon-label">IMPORT</span> ]</button>
+                <button id="btn-lock" class="btn-icon btn-lock-icon" title="Lock vault">[ <span class="icon-label">LOCK</span> ]</button>
             </div>
             <input type="file" id="import-file" accept=".json" class="hidden">
         </header>
 
         <div class="tabs">
-            <button class="tab active" data-tab="links">Links</button>
-            <button class="tab" data-tab="notes">Notes</button>
+            <button class="tab active" data-tab="links"><span class="tab-prefix">//</span> LINKS</button>
+            <button class="tab" data-tab="notes"><span class="tab-prefix">//</span> NOTES</button>
         </div>
 
         <!-- Links Tab -->
         <div id="tab-links" class="tab-content active">
             <div class="add-form">
-                <input type="text" id="link-title" placeholder="Title" class="input-field">
-                <input type="url" id="link-url" placeholder="https://..." class="input-field">
-                <input type="text" id="link-tags" placeholder="Tags (comma separated)" class="input-field">
-                <button id="btn-add-link" class="btn-primary">Add Link</button>
+                <div class="form-header"><span class="form-tag">NEW_ENTRY</span></div>
+                <div class="input-group">
+                    <span class="input-prefix">title:</span>
+                    <input type="text" id="link-title" placeholder="entry title" class="input-field">
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">url:</span>
+                    <input type="url" id="link-url" placeholder="https://" class="input-field">
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">tags:</span>
+                    <input type="text" id="link-tags" placeholder="tag1, tag2" class="input-field">
+                </div>
+                <button id="btn-add-link" class="btn-primary"><span class="btn-text">[ ADD LINK ]</span></button>
             </div>
-            <input type="text" id="search-links" placeholder="Search links..." class="search-input">
+            <div class="search-wrap">
+                <span class="search-prefix">SEARCH&gt;</span>
+                <input type="text" id="search-links" placeholder="filter entries..." class="search-input">
+            </div>
             <div id="links-list" class="items-list"></div>
         </div>
 
         <!-- Notes Tab -->
         <div id="tab-notes" class="tab-content">
             <div class="add-form">
-                <input type="text" id="note-title" placeholder="Title" class="input-field">
-                <textarea id="note-content" placeholder="Write your note..." class="input-field textarea-field" rows="4"></textarea>
-                <input type="text" id="note-tags" placeholder="Tags (comma separated)" class="input-field">
-                <button id="btn-add-note" class="btn-primary">Add Note</button>
+                <div class="form-header"><span class="form-tag">NEW_NOTE</span></div>
+                <div class="input-group">
+                    <span class="input-prefix">title:</span>
+                    <input type="text" id="note-title" placeholder="note title" class="input-field">
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">data:</span>
+                    <textarea id="note-content" placeholder="write your note..." class="input-field textarea-field" rows="4"></textarea>
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">tags:</span>
+                    <input type="text" id="note-tags" placeholder="tag1, tag2" class="input-field">
+                </div>
+                <button id="btn-add-note" class="btn-primary"><span class="btn-text">[ ADD NOTE ]</span></button>
             </div>
-            <input type="text" id="search-notes" placeholder="Search notes..." class="search-input">
+            <div class="search-wrap">
+                <span class="search-prefix">SEARCH&gt;</span>
+                <input type="text" id="search-notes" placeholder="filter entries..." class="search-input">
+            </div>
             <div id="notes-list" class="items-list"></div>
         </div>
     </div>
@@ -71,11 +127,14 @@
     <!-- Edit Modal -->
     <div id="edit-modal" class="modal hidden">
         <div class="modal-content">
-            <h2 id="modal-title">Edit</h2>
+            <div class="modal-header">
+                <h2 id="modal-title">EDIT_ENTRY</h2>
+                <span class="modal-close" id="btn-modal-cancel">[X]</span>
+            </div>
             <div id="modal-fields"></div>
             <div class="modal-actions">
-                <button id="btn-modal-save" class="btn-primary">Save</button>
-                <button id="btn-modal-cancel" class="btn-secondary">Cancel</button>
+                <button id="btn-modal-save" class="btn-primary"><span class="btn-text">[ SAVE ]</span></button>
+                <button id="btn-modal-cancel-btn" class="btn-secondary">[ CANCEL ]</button>
             </div>
         </div>
     </div>
