@@ -148,6 +148,7 @@
     const viewerTitle = $('viewer-title');
     const viewerImg = $('viewer-img');
     let pendingImageData = null; // holds { blob, dataUrl } before upload
+    let currentViewerImageId = null;
 
     // --- Init ---
     function init() {
@@ -190,6 +191,7 @@
 
         // Image viewer
         $('btn-viewer-close').addEventListener('click', closeViewer);
+        $('btn-viewer-download').addEventListener('click', downloadImage);
         imageViewer.addEventListener('click', e => { if (e.target === imageViewer) closeViewer(); });
 
         // Image upload
@@ -580,6 +582,7 @@
             if (!stored) return;
             const blob = await decryptBlob(stored.encrypted, currentPin, img.mimeType);
             const url = URL.createObjectURL(blob);
+            currentViewerImageId = id;
             viewerTitle.textContent = img.title;
             viewerImg.src = url;
             viewerImg.onload = () => URL.revokeObjectURL(url);
@@ -589,9 +592,31 @@
         }
     }
 
+    async function downloadImage() {
+        if (!currentViewerImageId) return;
+        const img = vaultData.images.find(i => i.id === currentViewerImageId);
+        if (!img) return;
+
+        try {
+            const stored = await dbGet(currentViewerImageId);
+            if (!stored) return;
+            const blob = await decryptBlob(stored.encrypted, currentPin, img.mimeType);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = img.mimeType.split('/')[1] || 'png';
+            a.download = `${img.title.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            alert('ERR: FAILED TO DOWNLOAD IMAGE');
+        }
+    }
+
     function closeViewer() {
         imageViewer.classList.add('hidden');
         viewerImg.src = '';
+        currentViewerImageId = null;
     }
 
     async function deleteImage(id) {

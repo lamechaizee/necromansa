@@ -969,6 +969,12 @@ header::after {
     letter-spacing: 0.1em;
 }
 
+.viewer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .viewer-body {
     display: flex;
     align-items: center;
