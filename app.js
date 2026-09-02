@@ -251,6 +251,7 @@
             }
 
             vaultData = await decrypt(stored.payload, pin);
+            if (!vaultData.images) vaultData.images = [];
             currentPin = pin;
             showApp();
         } catch {
