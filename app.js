@@ -59,9 +59,74 @@
         return btoa(String.fromCharCode(...new Uint8Array(hash)));
     }
 
+    // --- IndexedDB for image blobs ---
+    const DB_NAME = 'necromansa_images';
+    const DB_STORE = 'blobs';
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = () => {
+                req.result.createObjectStore(DB_STORE);
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbPut(key, value) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readwrite');
+            tx.objectStore(DB_STORE).put(value, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async function dbGet(key) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readonly');
+            const req = tx.objectStore(DB_STORE).get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbDelete(key) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readwrite');
+            tx.objectStore(DB_STORE).delete(key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    // --- Encrypt/decrypt image blob for IndexedDB storage ---
+    async function encryptBlob(blob, pin) {
+        const buffer = await blob.arrayBuffer();
+        const key = await deriveKey(pin);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv }, key, buffer
+        );
+        return { iv, data: new Uint8Array(encrypted) };
+    }
+
+    async function decryptBlob(encryptedObj, pin, mimeType) {
+        const key = await deriveKey(pin);
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: encryptedObj.iv }, key, encryptedObj.data
+        );
+        return new Blob([decrypted], { type: mimeType });
+    }
+
     // --- State ---
     let currentPin = null;
-    let vaultData = { links: [], notes: [] };
+    let vaultData = { links: [], notes: [], images: [] };
 
     // --- DOM refs ---
     const $ = id => document.getElementById(id);
@@ -75,9 +140,14 @@
     const enterPin = $('enter-pin');
     const linksList = $('links-list');
     const notesList = $('notes-list');
+    const imagesList = $('images-list');
     const editModal = $('edit-modal');
     const modalTitle = $('modal-title');
     const modalFields = $('modal-fields');
+    const imageViewer = $('image-viewer');
+    const viewerTitle = $('viewer-title');
+    const viewerImg = $('viewer-img');
+    let pendingImageData = null; // holds { blob, dataUrl } before upload
 
     // --- Init ---
     function init() {
@@ -106,15 +176,38 @@
         // Add items
         $('btn-add-link').addEventListener('click', addLink);
         $('btn-add-note').addEventListener('click', addNote);
+        $('btn-add-image').addEventListener('click', addImage);
 
         // Search
         $('search-links').addEventListener('input', () => renderLinks());
         $('search-notes').addEventListener('input', () => renderNotes());
+        $('search-images').addEventListener('input', () => renderImages());
 
         // Modal
         $('btn-modal-cancel').addEventListener('click', closeModal);
         $('btn-modal-cancel-btn').addEventListener('click', closeModal);
         $('btn-modal-save').addEventListener('click', saveModal);
+
+        // Image viewer
+        $('btn-viewer-close').addEventListener('click', closeViewer);
+        imageViewer.addEventListener('click', e => { if (e.target === imageViewer) closeViewer(); });
+
+        // Image upload
+        const uploadArea = $('upload-area');
+        const imageFile = $('image-file');
+        uploadArea.addEventListener('click', () => { if (!pendingImageData) imageFile.click(); });
+        imageFile.addEventListener('change', handleImageSelect);
+        $('btn-clear-preview').addEventListener('click', e => { e.stopPropagation(); clearImagePreview(); });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) processImageFile(file);
+        });
 
         // Enter key on PIN inputs
         newPin.addEventListener('keydown', e => { if (e.key === 'Enter') confirmPin.focus(); });
@@ -137,10 +230,10 @@
         }
 
         const pinHash = await hashPin(pin);
-        const encrypted = await encrypt({ links: [], notes: [] }, pin);
+        const encrypted = await encrypt({ links: [], notes: [], images: [] }, pin);
         localStorage.setItem(DATA_KEY, JSON.stringify({ hash: pinHash, payload: encrypted }));
         currentPin = pin;
-        vaultData = { links: [], notes: [] };
+        vaultData = { links: [], notes: [], images: [] };
         showApp();
     }
 
@@ -167,8 +260,9 @@
 
     function lockVault() {
         currentPin = null;
-        vaultData = { links: [], notes: [] };
+        vaultData = { links: [], notes: [], images: [] };
         enterPin.value = '';
+        pendingImageData = null;
         appScreen.classList.remove('active');
         loginScreen.classList.add('active');
         loginSection.classList.remove('hidden');
@@ -188,6 +282,7 @@
         appScreen.classList.add('active');
         renderLinks();
         renderNotes();
+        renderImages();
     }
 
     function showError(msg) {
@@ -359,6 +454,172 @@
         editModal.dataset.id = id;
     }
 
+    // --- Images ---
+    function handleImageSelect(e) {
+        const file = e.target.files[0];
+        if (file) processImageFile(file);
+        e.target.value = '';
+    }
+
+    function processImageFile(file) {
+        if (file.size > MAX_IMAGE_SIZE) {
+            alert('ERR: FILE TOO LARGE (MAX 5MB)');
+            return;
+        }
+        if (!file.type.startsWith('image/')) {
+            alert('ERR: NOT AN IMAGE FILE');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            pendingImageData = { blob: file, dataUrl: reader.result, mimeType: file.type };
+            $('preview-img').src = reader.result;
+            $('upload-preview').classList.remove('hidden');
+            $('upload-area').querySelector('.upload-prompt').classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function clearImagePreview() {
+        pendingImageData = null;
+        $('preview-img').src = '';
+        $('upload-preview').classList.add('hidden');
+        $('upload-area').querySelector('.upload-prompt').classList.remove('hidden');
+    }
+
+    async function addImage() {
+        if (!pendingImageData) {
+            alert('ERR: NO IMAGE SELECTED');
+            return;
+        }
+
+        const title = $('image-title').value.trim() || 'Untitled';
+        const tags = $('image-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+        // Encrypt and store blob in IndexedDB
+        const encrypted = await encryptBlob(pendingImageData.blob, currentPin);
+        await dbPut(id, { encrypted, mimeType: pendingImageData.mimeType });
+
+        // Store metadata in vault
+        vaultData.images.unshift({
+            id, title, tags, mimeType: pendingImageData.mimeType,
+            size: pendingImageData.blob.size,
+            created: new Date().toISOString()
+        });
+
+        $('image-title').value = '';
+        $('image-tags').value = '';
+        clearImagePreview();
+        saveVault();
+        renderImages();
+    }
+
+    async function renderImages() {
+        const query = $('search-images').value.toLowerCase();
+        const filtered = vaultData.images.filter(img =>
+            img.title.toLowerCase().includes(query) ||
+            img.tags.some(t => t.toLowerCase().includes(query))
+        );
+
+        if (filtered.length === 0) {
+            imagesList.innerHTML = '<div class="empty-state">NO IMAGES IN VAULT</div>';
+            return;
+        }
+
+        // Render cards with placeholder, then load thumbnails
+        imagesList.innerHTML = filtered.map(img => `
+            <div class="image-card" data-id="${img.id}">
+                <div class="image-thumb-wrap" onclick="app.viewImage('${img.id}')">
+                    <img src="" alt="${esc(img.title)}" data-img-id="${img.id}" class="image-thumb">
+                </div>
+                <div class="image-card-info">
+                    <div class="image-card-title">${esc(img.title)}</div>
+                    <div class="image-card-meta">
+                        <span class="image-card-date">${formatDate(img.created)}</span>
+                        <div class="image-card-actions">
+                            <button class="btn-edit" onclick="app.editImage('${img.id}')">Edit</button>
+                            <button class="btn-danger" onclick="app.deleteImage('${img.id}')">Del</button>
+                        </div>
+                    </div>
+                    ${img.tags.length ? `<div class="item-tags">${img.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Load thumbnails asynchronously
+        for (const img of filtered) {
+            loadThumbnail(img.id, img.mimeType);
+        }
+    }
+
+    async function loadThumbnail(id, mimeType) {
+        try {
+            const stored = await dbGet(id);
+            if (!stored) return;
+            const blob = await decryptBlob(stored.encrypted, currentPin, mimeType);
+            const url = URL.createObjectURL(blob);
+            const thumbEl = imagesList.querySelector(`img[data-img-id="${id}"]`);
+            if (thumbEl) {
+                thumbEl.src = url;
+                thumbEl.onload = () => URL.revokeObjectURL(url);
+            }
+        } catch {
+            // silently fail for missing/corrupt blobs
+        }
+    }
+
+    async function viewImage(id) {
+        const img = vaultData.images.find(i => i.id === id);
+        if (!img) return;
+
+        try {
+            const stored = await dbGet(id);
+            if (!stored) return;
+            const blob = await decryptBlob(stored.encrypted, currentPin, img.mimeType);
+            const url = URL.createObjectURL(blob);
+            viewerTitle.textContent = img.title;
+            viewerImg.src = url;
+            viewerImg.onload = () => URL.revokeObjectURL(url);
+            imageViewer.classList.remove('hidden');
+        } catch {
+            alert('ERR: FAILED TO DECRYPT IMAGE');
+        }
+    }
+
+    function closeViewer() {
+        imageViewer.classList.add('hidden');
+        viewerImg.src = '';
+    }
+
+    async function deleteImage(id) {
+        vaultData.images = vaultData.images.filter(i => i.id !== id);
+        await dbDelete(id);
+        saveVault();
+        renderImages();
+    }
+
+    function editImage(id) {
+        const img = vaultData.images.find(i => i.id === id);
+        if (!img) return;
+
+        modalTitle.textContent = 'EDIT_IMAGE';
+        modalFields.innerHTML = `
+            <div class="input-group">
+                <span class="input-prefix">title:</span>
+                <input type="text" id="edit-image-title" class="input-field" value="${esc(img.title)}" placeholder="image title">
+            </div>
+            <div class="input-group">
+                <span class="input-prefix">tags:</span>
+                <input type="text" id="edit-image-tags" class="input-field" value="${esc(img.tags.join(', '))}" placeholder="tag1, tag2">
+            </div>
+        `;
+        editModal.classList.remove('hidden');
+        editModal.dataset.type = 'image';
+        editModal.dataset.id = id;
+    }
+
     // --- Modal ---
     function closeModal() {
         editModal.classList.add('hidden');
@@ -384,6 +645,13 @@
                 note.tags = $('edit-note-tags').value.split(',').map(t => t.trim()).filter(Boolean);
             }
             renderNotes();
+        } else if (type === 'image') {
+            const img = vaultData.images.find(i => i.id === id);
+            if (img) {
+                img.title = $('edit-image-title').value.trim() || img.title;
+                img.tags = $('edit-image-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+            }
+            renderImages();
         }
 
         saveVault();
@@ -391,8 +659,29 @@
     }
 
     // --- Import / Export ---
-    function exportData() {
-        const blob = new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' });
+    async function exportData() {
+        // Export vault metadata + encrypted image blobs
+        const exportObj = { ...vaultData };
+
+        // Include image blobs from IndexedDB
+        if (vaultData.images && vaultData.images.length > 0) {
+            exportObj._imageBlobs = {};
+            for (const img of vaultData.images) {
+                try {
+                    const stored = await dbGet(img.id);
+                    if (stored) {
+                        // Convert encrypted Uint8Arrays to base64 for JSON transport
+                        exportObj._imageBlobs[img.id] = {
+                            iv: uint8ToBase64(stored.encrypted.iv),
+                            data: uint8ToBase64(stored.encrypted.data),
+                            mimeType: stored.mimeType
+                        };
+                    }
+                } catch { /* skip missing blobs */ }
+            }
+        }
+
+        const blob = new Blob([JSON.stringify(exportObj)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -409,15 +698,39 @@
             const text = await file.text();
             const imported = JSON.parse(text);
             if (imported.links && imported.notes) {
+                // Ensure images array exists
+                if (!imported.images) imported.images = [];
+
+                // Restore image blobs to IndexedDB
+                if (imported._imageBlobs) {
+                    for (const [id, blobObj] of Object.entries(imported._imageBlobs)) {
+                        const encrypted = {
+                            iv: base64ToUint8(blobObj.iv),
+                            data: base64ToUint8(blobObj.data)
+                        };
+                        await dbPut(id, { encrypted, mimeType: blobObj.mimeType });
+                    }
+                    delete imported._imageBlobs;
+                }
+
                 vaultData = imported;
                 await saveVault();
                 renderLinks();
                 renderNotes();
+                renderImages();
             }
         } catch {
             alert('ERR: INVALID BACKUP FILE');
         }
         e.target.value = '';
+    }
+
+    function uint8ToBase64(arr) {
+        return btoa(String.fromCharCode(...arr));
+    }
+
+    function base64ToUint8(b64) {
+        return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     }
 
     // --- Helpers ---
@@ -433,7 +746,7 @@
     }
 
     // --- Expose for inline onclick ---
-    window.app = { editLink, deleteLink, editNote, deleteNote };
+    window.app = { editLink, deleteLink, editNote, deleteNote, editImage, deleteImage, viewImage };
 
     // --- Start ---
     init();

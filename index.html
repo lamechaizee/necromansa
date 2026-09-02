@@ -21,7 +21,7 @@
                 <div class="logo-glow"></div>
                 <h1 class="logo" data-text="NECROMANSA">NECROMANSA</h1>
             </div>
-            <p class="subtitle">&lt; LINK &amp; NOTE VAULT &gt;</p>
+            <p class="subtitle">&lt; LINK, NOTE &amp; IMAGE VAULT &gt;</p>
             <div class="status-line">SYSTEM: <span class="blink">AWAITING AUTHENTICATION</span></div>
 
             <div id="setup-section" class="hidden">
@@ -71,6 +71,7 @@
         <div class="tabs">
             <button class="tab active" data-tab="links"><span class="tab-prefix">//</span> LINKS</button>
             <button class="tab" data-tab="notes"><span class="tab-prefix">//</span> NOTES</button>
+            <button class="tab" data-tab="images"><span class="tab-prefix">//</span> IMAGES</button>
         </div>
 
         <!-- Links Tab -->
@@ -122,6 +123,39 @@
             </div>
             <div id="notes-list" class="items-list"></div>
         </div>
+
+        <!-- Images Tab -->
+        <div id="tab-images" class="tab-content">
+            <div class="add-form">
+                <div class="form-header"><span class="form-tag">NEW_IMAGE</span></div>
+                <div class="upload-area" id="upload-area">
+                    <input type="file" id="image-file" accept="image/*" class="hidden">
+                    <div class="upload-prompt">
+                        <span class="upload-icon">[ + ]</span>
+                        <span class="upload-text">DROP IMAGE OR CLICK TO SELECT</span>
+                        <span class="upload-hint">PNG, JPG, GIF, WEBP &mdash; max 5MB</span>
+                    </div>
+                    <div id="upload-preview" class="upload-preview hidden">
+                        <img id="preview-img" src="" alt="preview">
+                        <button id="btn-clear-preview" class="btn-danger btn-clear-preview">[X]</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">title:</span>
+                    <input type="text" id="image-title" placeholder="image title" class="input-field">
+                </div>
+                <div class="input-group">
+                    <span class="input-prefix">tags:</span>
+                    <input type="text" id="image-tags" placeholder="tag1, tag2" class="input-field">
+                </div>
+                <button id="btn-add-image" class="btn-primary"><span class="btn-text">[ ADD IMAGE ]</span></button>
+            </div>
+            <div class="search-wrap">
+                <span class="search-prefix">SEARCH&gt;</span>
+                <input type="text" id="search-images" placeholder="filter entries..." class="search-input">
+            </div>
+            <div id="images-list" class="images-grid"></div>
+        </div>
     </div>
 
     <!-- Edit Modal -->
@@ -135,6 +169,19 @@
             <div class="modal-actions">
                 <button id="btn-modal-save" class="btn-primary"><span class="btn-text">[ SAVE ]</span></button>
                 <button id="btn-modal-cancel-btn" class="btn-secondary">[ CANCEL ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer" class="modal hidden">
+        <div class="viewer-content">
+            <div class="viewer-header">
+                <span id="viewer-title" class="viewer-title"></span>
+                <span class="modal-close" id="btn-viewer-close">[X]</span>
+            </div>
+            <div class="viewer-body">
+                <img id="viewer-img" src="" alt="">
             </div>
         </div>
     </div>
