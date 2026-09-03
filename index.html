@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
     <!-- Scanline overlay -->
@@ -72,6 +73,7 @@
             <button class="tab active" data-tab="links"><span class="tab-prefix">//</span> LINKS</button>
             <button class="tab" data-tab="notes"><span class="tab-prefix">//</span> NOTES</button>
             <button class="tab" data-tab="images"><span class="tab-prefix">//</span> IMAGES</button>
+            <button class="tab" data-tab="chat"><span class="tab-prefix">//</span> CHAT</button>
         </div>
 
         <!-- Links Tab -->
@@ -156,7 +158,29 @@
             </div>
             <div id="images-list" class="images-grid"></div>
         </div>
+        <!-- Chat Tab -->
+        <div id="tab-chat" class="tab-content">
+            <div id="chat-auth"></div>
+            <div id="chat-main" class="hidden">
+                <div id="contacts-panel">
+                    <div class="chat-search-wrap">
+                        <span class="search-prefix">FIND&gt;</span>
+                        <input type="text" id="search-contacts" placeholder="search users..." class="search-input">
+                        <div id="search-results" class="search-results hidden"></div>
+                    </div>
+                    <div id="contacts-list" class="contacts-list"></div>
+                    <div class="chat-footer-bar">
+                        <span id="connection-status" class="status-offline">DISCONNECTED</span>
+                        <button class="btn-danger" id="btn-chat-logout">[ LOGOUT ]</button>
+                    </div>
+                </div>
+                <div id="chat-view" class="hidden"></div>
+            </div>
+        </div>
     </div>
+
+    <!-- User Profile Modal -->
+    <div id="user-profile-modal" class="modal hidden"></div>
 
     <!-- Edit Modal -->
     <div id="edit-modal" class="modal hidden">

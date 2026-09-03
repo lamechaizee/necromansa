@@ -771,6 +771,58 @@
         return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
+    // --- Chat Integration ---
+    let chatInitialized = false;
+
+    async function initChatTab() {
+        if (chatInitialized) return;
+
+        try {
+            // Dynamically import chat modules
+            const { initChat, showAuthScreen, initSearchUI, logoutChat } = await import('./chat/ui.js');
+
+            const loggedIn = await initChat();
+            if (!loggedIn) {
+                showAuthScreen();
+            }
+
+            initSearchUI();
+
+            // Logout handler
+            $('btn-chat-logout')?.addEventListener('click', () => {
+                logoutChat();
+                chatInitialized = false;
+            });
+
+            chatInitialized = true;
+        } catch (err) {
+            console.error('Chat init failed:', err);
+            const chatAuth = $('chat-auth');
+            if (chatAuth) {
+                chatAuth.innerHTML = `<div class="error-text" style="text-align:center;padding:2rem;">Chat initialization failed: ${esc(err.message)}</div>`;
+            }
+        }
+    }
+
+    // Override switchTab to handle chat tab
+    const originalSwitchTab = switchTab;
+    function switchTabWithChat(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
+
+        if (tab === 'chat') {
+            initChatTab();
+        }
+    }
+
+    // Rebind tab clicks to use new switchTab
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.replaceWith(tab.cloneNode(true));
+    });
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => switchTabWithChat(tab.dataset.tab));
+    });
+
     // --- Expose for inline onclick ---
     window.app = { editLink, deleteLink, editNote, deleteNote, editImage, deleteImage, viewImage };
 
