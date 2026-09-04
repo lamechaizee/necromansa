@@ -11,7 +11,7 @@ router.get('/:userId', authMiddleware, (req, res) => {
   const before = req.query.before ? parseInt(req.query.before) : null;
 
   let query = `
-    SELECT id, sender_id, recipient_id, ciphertext, nonce, ephemeral_pub, signature, created_at, delivered, read
+    SELECT id, sender_id, recipient_id, ciphertext, nonce, ephemeral_pub, signature, created_at, delivered, delivered_at, read, read_at
     FROM messages
     WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)
   `;
@@ -29,7 +29,7 @@ router.get('/:userId', authMiddleware, (req, res) => {
 
   // Mark messages from other user as delivered
   db.prepare(
-    'UPDATE messages SET delivered = 1 WHERE sender_id = ? AND recipient_id = ? AND delivered = 0'
+    'UPDATE messages SET delivered = 1, delivered_at = CURRENT_TIMESTAMP WHERE sender_id = ? AND recipient_id = ? AND delivered = 0'
   ).run(otherId, req.userId);
 
   res.json(messages.map(m => ({
@@ -42,7 +42,9 @@ router.get('/:userId', authMiddleware, (req, res) => {
     signature: m.signature,
     createdAt: m.created_at,
     delivered: !!m.delivered,
-    read: !!m.read
+    deliveredAt: m.delivered_at,
+    read: !!m.read,
+    readAt: m.read_at
   })).reverse());
 });
 

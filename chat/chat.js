@@ -90,8 +90,8 @@ export function connectSocket(serverUrl) {
     emit('stop_typing', { userId });
   });
 
-  socket.on('messages_read', ({ byUserId }) => {
-    emit('messages_read', { byUserId });
+  socket.on('messages_read', ({ byUserId, at }) => {
+    emit('messages_read', { byUserId, at });
   });
 
   socket.on('user_online', ({ userId, online }) => {

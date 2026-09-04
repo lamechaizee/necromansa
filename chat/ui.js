@@ -268,6 +268,12 @@ async function connectAndSetup(serverUrl) {
   setupSocketListeners();
   await loadUnread();
   showChatUI();
+
+  // Wire up logout button
+  const logoutBtn = document.getElementById('btn-chat-logout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logoutChat);
+  }
 }
 
 function setupSocketListeners() {
@@ -293,7 +299,13 @@ function setupSocketListeners() {
       tempEl.classList.remove('sending');
       tempEl.classList.add('sent');
       const statusEl = tempEl.querySelector('.msg-status');
-      if (statusEl) statusEl.textContent = 'sent';
+      if (statusEl) {
+        if (msg.delivered) {
+          statusEl.innerHTML = '<span class="receipt delivered"><span class="check">&#10003;</span><span class="check">&#10003;</span></span>';
+        } else {
+          statusEl.innerHTML = '<span class="receipt sent"><span class="check">&#10003;</span></span>';
+        }
+      }
     }
   });
 
@@ -323,8 +335,11 @@ function setupSocketListeners() {
 
   on('messages_read', ({ byUserId }) => {
     if (currentChatUser && currentChatUser.id === byUserId) {
-      document.querySelectorAll('.msg-status').forEach(el => {
-        if (el.textContent === 'delivered') el.textContent = 'read';
+      document.querySelectorAll('.message.own .msg-status').forEach(el => {
+        const receipt = el.querySelector('.receipt');
+        if (receipt) {
+          receipt.className = 'receipt read';
+        }
       });
     }
   });
@@ -625,11 +640,22 @@ function appendMessage(msg, animate = true) {
     content = `<div class="msg-text">${escapeHtml(msg.plaintext)}</div>`;
   }
 
+  let receiptHtml = '';
+  if (msg.isOwn && !msg.sending) {
+    if (msg.read) {
+      receiptHtml = '<span class="receipt read"><span class="check">&#10003;</span><span class="check">&#10003;</span></span>';
+    } else if (msg.delivered) {
+      receiptHtml = '<span class="receipt delivered"><span class="check">&#10003;</span><span class="check">&#10003;</span></span>';
+    } else {
+      receiptHtml = '<span class="receipt sent"><span class="check">&#10003;</span></span>';
+    }
+  }
+
   div.innerHTML = `
     ${content}
     <div class="msg-meta">
       <span class="msg-time">${time}</span>
-      ${msg.isOwn ? `<span class="msg-status">${msg.sending ? 'sending' : (msg.delivered ? 'delivered' : 'sent')}</span>` : ''}
+      ${msg.isOwn ? `<span class="msg-status">${msg.sending ? '<span class="receipt sending"><span class="check spinning">&#9675;</span></span>' : receiptHtml}</span>` : ''}
     </div>
   `;
 

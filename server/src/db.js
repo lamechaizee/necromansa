@@ -35,7 +35,9 @@ db.exec(`
     signature TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     delivered INTEGER DEFAULT 0,
+    delivered_at DATETIME,
     read INTEGER DEFAULT 0,
+    read_at DATETIME,
     FOREIGN KEY (sender_id) REFERENCES users(id),
     FOREIGN KEY (recipient_id) REFERENCES users(id)
   );

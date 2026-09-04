@@ -64,8 +64,15 @@ io.on('connection', (socket) => {
   // Update last seen
   db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
 
-  // Broadcast online status
+  // Broadcast online status to all
   io.emit('user_online', { userId, online: true });
+
+  // Send current online users list to newly connected client
+  for (const [onlineUserId, sockets] of onlineUsers) {
+    if (onlineUserId !== userId && sockets.size > 0) {
+      socket.emit('user_online', { userId: onlineUserId, online: true });
+    }
+  }
 
   console.log(`User ${userId} connected (${socket.id})`);
 
@@ -83,6 +90,7 @@ io.on('connection', (socket) => {
        VALUES (?, ?, ?, ?, ?, ?)`
     ).run(userId, recipientId, ciphertext, nonce, ephemeralPub, signature);
 
+    const now = new Date().toISOString();
     const message = {
       id: result.lastInsertRowid,
       senderId: userId,
@@ -91,20 +99,23 @@ io.on('connection', (socket) => {
       nonce,
       ephemeralPub,
       signature,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       delivered: false,
-      read: false
+      deliveredAt: null,
+      read: false,
+      readAt: null
     };
 
     // Send to recipient if online
     const recipientSockets = onlineUsers.get(recipientId);
-    if (recipientSockets) {
+    if (recipientSockets && recipientSockets.size > 0) {
       for (const sid of recipientSockets) {
         io.to(sid).emit('message', message);
       }
       // Mark as delivered
-      db.prepare('UPDATE messages SET delivered = 1 WHERE id = ?').run(message.id);
+      db.prepare('UPDATE messages SET delivered = 1, delivered_at = CURRENT_TIMESTAMP WHERE id = ?').run(message.id);
       message.delivered = true;
+      message.deliveredAt = now;
     }
 
     // Confirm to sender
@@ -134,13 +145,13 @@ io.on('connection', (socket) => {
   // Mark as read
   socket.on('mark_read', ({ senderId }) => {
     db.prepare(
-      'UPDATE messages SET read = 1 WHERE sender_id = ? AND recipient_id = ? AND read = 0'
+      'UPDATE messages SET read = 1, read_at = CURRENT_TIMESTAMP WHERE sender_id = ? AND recipient_id = ? AND read = 0'
     ).run(senderId, userId);
 
     const senderSockets = onlineUsers.get(senderId);
     if (senderSockets) {
       for (const sid of senderSockets) {
-        io.to(sid).emit('messages_read', { byUserId: userId });
+        io.to(sid).emit('messages_read', { byUserId: userId, at: new Date().toISOString() });
       }
     }
   });
