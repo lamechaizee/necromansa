@@ -142,6 +142,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Delete message (unsend)
+  socket.on('delete_message', ({ messageId }) => {
+    const message = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(messageId, userId);
+    if (!message) return;
+
+    db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
+
+    // Notify recipient to remove the message
+    const recipientSockets = onlineUsers.get(message.recipient_id);
+    if (recipientSockets) {
+      for (const sid of recipientSockets) {
+        io.to(sid).emit('message_deleted', { messageId, byUserId: userId });
+      }
+    }
+
+    // Confirm to sender
+    socket.emit('message_deleted', { messageId, byUserId: userId });
+  });
+
   // Mark as read
   socket.on('mark_read', ({ senderId }) => {
     db.prepare(

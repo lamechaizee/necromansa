@@ -2,8 +2,8 @@
 // Renders chat interface, handles user interactions
 
 import { initCrypto, generateSigningKeypair, generateEncryptionKeypair, encryptPrivateKey, decryptPrivateKey } from './crypto.js';
-import { register, login, searchUsers, getUserProfile, saveChatSession, loadChatSession, clearChatSession, setAuth, getCurrentUserId, getUnreadCounts } from './contacts.js';
-import { connectSocket, disconnectSocket, setUserKeys, cachePublicKey, getCachedPublicKey, sendMessage, sendImageMessage, loadMessages, markRead, debouncedTyping, on, off, isConnected } from './chat.js';
+import { register, login, searchUsers, getUserProfile, updateProfile, saveChatSession, loadChatSession, clearChatSession, setAuth, getCurrentUserId, getUnreadCounts } from './contacts.js';
+import { connectSocket, disconnectSocket, setUserKeys, cachePublicKey, getCachedPublicKey, sendMessage, sendImageMessage, deleteMessage, loadMessages, markRead, debouncedTyping, on, off, isConnected } from './chat.js';
 
 let currentChatUser = null;
 let chatMessages = [];
@@ -274,6 +274,36 @@ async function connectAndSetup(serverUrl) {
   if (logoutBtn) {
     logoutBtn.addEventListener('click', logoutChat);
   }
+
+  // Wire up My Profile button
+  const myProfileBtn = document.getElementById('btn-my-profile');
+  if (myProfileBtn) {
+    myProfileBtn.addEventListener('click', async () => {
+      const session = loadChatSession();
+      if (session) {
+        try {
+          const profile = await getUserProfile(session.userId);
+          showUserProfile({
+            id: session.userId,
+            displayName: profile.displayName,
+            username: profile.username,
+            bio: profile.bio,
+            publicSignKey: profile.publicSignKey,
+            publicEncKey: profile.publicEncKey
+          });
+        } catch {
+          showUserProfile({
+            id: session.userId,
+            displayName: session.displayName || 'Me',
+            username: '',
+            bio: '',
+            publicSignKey: session.signPublicKey || '',
+            publicEncKey: session.encPublicKey || ''
+          });
+        }
+      }
+    });
+  }
 }
 
 function setupSocketListeners() {
@@ -341,6 +371,17 @@ function setupSocketListeners() {
           receipt.className = 'receipt read';
         }
       });
+    }
+  });
+
+  on('message_deleted', ({ messageId }) => {
+    // Remove from local messages array
+    chatMessages = chatMessages.filter(m => m.id !== messageId);
+    // Remove from DOM
+    const el = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (el) {
+      el.style.animation = 'msgDelete 0.3s ease forwards';
+      setTimeout(() => el.remove(), 300);
     }
   });
 
@@ -510,6 +551,8 @@ function renderChatView() {
     </div>
     <div class="chat-input-area">
       <button class="btn-icon btn-attach" id="btn-attach-image" title="Send image">[ + ]</button>
+      <button class="btn-icon btn-emoji" id="btn-emoji" title="Emoji">[ : ) ]</button>
+      <div id="emoji-picker" class="emoji-picker hidden"></div>
       <input type="file" id="chat-image-input" accept="image/*" class="hidden">
       <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off">
       <button class="btn-send" id="btn-send-message">[ > ]</button>
@@ -552,6 +595,29 @@ function renderChatView() {
 
   document.getElementById('btn-chat-profile').addEventListener('click', () => {
     showUserProfile(currentChatUser);
+  });
+
+  // Emoji picker
+  const emojiBtn = document.getElementById('btn-emoji');
+  const emojiPicker = document.getElementById('emoji-picker');
+  const emojiList = ['😀','😂','😍','🥰','😎','🤔','👍','👋','❤️','🔥','✨','💯','🎉','😢','😤','🙏','💪','🤝','👀','💬','📱','💻','⚡','🛡️','🔑','🎵','🚀','⭐','🌟','💜'];
+  emojiPicker.innerHTML = emojiList.map(e => `<button class="emoji-btn" data-emoji="${e}">${e}</button>`).join('');
+  emojiBtn.addEventListener('click', () => {
+    emojiPicker.classList.toggle('hidden');
+  });
+  emojiPicker.querySelectorAll('.emoji-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById('chat-input');
+      input.value += btn.dataset.emoji;
+      input.focus();
+      emojiPicker.classList.add('hidden');
+    });
+  });
+  // Close emoji picker when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+      emojiPicker.classList.add('hidden');
+    }
   });
 
   // Show chat view
@@ -656,8 +722,24 @@ function appendMessage(msg, animate = true) {
     <div class="msg-meta">
       <span class="msg-time">${time}</span>
       ${msg.isOwn ? `<span class="msg-status">${msg.sending ? '<span class="receipt sending"><span class="check spinning">&#9675;</span></span>' : receiptHtml}</span>` : ''}
+      ${msg.isOwn && msg.id && !msg.sending ? `<button class="btn-delete-msg" data-msg-id="${msg.id}" title="Delete message">[x]</button>` : ''}
     </div>
   `;
+
+  // Add delete handler
+  const deleteBtn = div.querySelector('.btn-delete-msg');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgId = parseInt(deleteBtn.dataset.msgId);
+      if (msgId) {
+        deleteMessage(msgId);
+        chatMessages = chatMessages.filter(m => m.id !== msgId);
+        div.style.animation = 'msgDelete 0.3s ease forwards';
+        setTimeout(() => div.remove(), 300);
+      }
+    });
+  }
 
   messagesEl.appendChild(div);
 }
@@ -696,24 +778,40 @@ function showUserProfile(user) {
   if (!modal) return;
 
   const isOnline = onlineUsers.has(user.id);
+  const isOwn = user.id === getCurrentUserId();
 
   modal.innerHTML = `
     <div class="modal-content">
       <div class="modal-header">
-        <h2>USER_PROFILE</h2>
+        <h2>${isOwn ? 'MY_PROFILE' : 'USER_PROFILE'}</h2>
         <span class="modal-close" id="btn-close-profile">[X]</span>
       </div>
       <div class="profile-content">
-        <div class="profile-avatar">${user.displayName[0].toUpperCase()}</div>
-        <div class="profile-name">${escapeHtml(user.displayName)}</div>
-        <div class="profile-username">@${escapeHtml(user.username)}</div>
-        <div class="profile-status ${isOnline ? 'online' : 'offline'}">${isOnline ? 'Online' : 'Offline'}</div>
-        ${user.bio ? `<div class="profile-bio">${escapeHtml(user.bio)}</div>` : ''}
+        <div class="profile-avatar">${(user.displayName || '?')[0].toUpperCase()}</div>
+        ${isOwn ? `
+          <div class="profile-edit-form">
+            <div class="input-group">
+              <span class="input-prefix">name:</span>
+              <input type="text" id="edit-display-name" class="input-field" value="${escapeHtml(user.displayName || '')}" placeholder="Display name">
+            </div>
+            <div class="input-group">
+              <span class="input-prefix">bio:</span>
+              <input type="text" id="edit-bio" class="input-field" value="${escapeHtml(user.bio || '')}" placeholder="Tell something about yourself">
+            </div>
+            <button id="btn-save-profile" class="btn-primary">[ SAVE_PROFILE ]</button>
+            <p id="profile-edit-error" class="error-text"></p>
+          </div>
+        ` : `
+          <div class="profile-name">${escapeHtml(user.displayName)}</div>
+          <div class="profile-username">@${escapeHtml(user.username)}</div>
+          <div class="profile-status ${isOnline ? 'online' : 'offline'}">${isOnline ? 'Online' : 'Offline'}</div>
+          ${user.bio ? `<div class="profile-bio">${escapeHtml(user.bio)}</div>` : ''}
+        `}
         <div class="profile-keys">
           <div class="key-label">Signing Key:</div>
-          <div class="key-value">${user.publicSignKey.slice(0, 20)}...</div>
+          <div class="key-value">${(user.publicSignKey || '').slice(0, 20)}...</div>
           <div class="key-label">Encryption Key:</div>
-          <div class="key-value">${user.publicEncKey.slice(0, 20)}...</div>
+          <div class="key-value">${(user.publicEncKey || '').slice(0, 20)}...</div>
         </div>
       </div>
     </div>
@@ -723,6 +821,44 @@ function showUserProfile(user) {
   document.getElementById('btn-close-profile').addEventListener('click', () => {
     modal.classList.add('hidden');
   });
+
+  if (isOwn) {
+    document.getElementById('btn-save-profile').addEventListener('click', async () => {
+      const newName = document.getElementById('edit-display-name').value.trim();
+      const newBio = document.getElementById('edit-bio').value.trim();
+      const errorEl = document.getElementById('profile-edit-error');
+
+      if (!newName) {
+        errorEl.textContent = 'Display name required';
+        return;
+      }
+
+      try {
+        const btn = document.getElementById('btn-save-profile');
+        btn.disabled = true;
+        btn.textContent = '[ SAVING... ]';
+
+        await updateProfile(newName, newBio);
+
+        // Update local session
+        const session = loadChatSession();
+        if (session) {
+          session.displayName = newName;
+          saveChatSession(session);
+        }
+
+        // Update current chat user
+        currentChatUser = { ...currentChatUser, displayName: newName, bio: newBio };
+
+        modal.classList.add('hidden');
+      } catch (err) {
+        errorEl.textContent = err.message;
+        const btn = document.getElementById('btn-save-profile');
+        btn.disabled = false;
+        btn.textContent = '[ SAVE_PROFILE ]';
+      }
+    });
+  }
 }
 
 function showNotification(msg) {

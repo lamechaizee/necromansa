@@ -10,6 +10,10 @@ let typingTimers = new Map();
 let reconnectAttempts = 0;
 const MAX_RECONNECT = 10;
 
+// Offline message queue
+let offlineQueue = [];
+let wasConnected = false;
+
 // User's keys (set after login)
 let userKeys = {
   signPrivateKey: null,
@@ -50,6 +54,16 @@ export function connectSocket(serverUrl) {
     console.log('Socket connected');
     reconnectAttempts = 0;
     emit('connection_status', { connected: true });
+
+    // Flush offline queue
+    if (offlineQueue.length > 0) {
+      const queue = [...offlineQueue];
+      offlineQueue = [];
+      for (const item of queue) {
+        socket.emit(item.event, item.data);
+      }
+    }
+    wasConnected = true;
   });
 
   socket.on('disconnect', (reason) => {
@@ -96,6 +110,10 @@ export function connectSocket(serverUrl) {
 
   socket.on('user_online', ({ userId, online }) => {
     emit('user_online', { userId, online });
+  });
+
+  socket.on('message_deleted', ({ messageId, byUserId }) => {
+    emit('message_deleted', { messageId, byUserId });
   });
 
   return socket;
@@ -152,13 +170,22 @@ export async function sendMessage(recipientId, text) {
 
   const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 
-  socket.emit('send_message', {
-    recipientId,
-    ...encrypted,
-    tempId
-  });
+  const payload = { recipientId, ...encrypted, tempId };
+
+  if (socket && socket.connected) {
+    socket.emit('send_message', payload);
+  } else {
+    offlineQueue.push({ event: 'send_message', data: payload });
+  }
 
   return tempId;
+}
+
+// Delete a message (unsend)
+export function deleteMessage(messageId) {
+  if (socket && socket.connected) {
+    socket.emit('delete_message', { messageId });
+  }
 }
 
 // Send an image message

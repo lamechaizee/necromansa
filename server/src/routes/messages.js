@@ -59,6 +59,24 @@ router.post('/:userId/read', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+// Delete a message (unsend)
+router.delete('/:messageId', authMiddleware, (req, res) => {
+  const messageId = parseInt(req.params.messageId);
+
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (!message) {
+    return res.status(404).json({ error: 'Message not found' });
+  }
+
+  if (message.sender_id !== req.userId) {
+    return res.status(403).json({ error: 'Can only delete your own messages' });
+  }
+
+  db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
+
+  res.json({ ok: true, recipientId: message.recipient_id });
+});
+
 // Get unread counts
 router.get('/unread/counts', authMiddleware, (req, res) => {
   const counts = db.prepare(
